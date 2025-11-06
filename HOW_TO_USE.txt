@@ -1,0 +1,186 @@
+================================================================================
+                    RECOMMANDATEUR DE FILMS
+                    Movie Recommendation System
+                    How to Use Guide
+================================================================================
+
+This is a simple step-by-step guide to use the Movie Recommendation System.
+
+================================================================================
+STEP 1: INSTALL PYTHON
+================================================================================
+
+1. Download Python from: https://www.python.org/downloads/
+2. Install Python (make sure to check "Add Python to PATH" during installation)
+3. Open Command Prompt (Windows) or Terminal (Mac/Linux)
+
+================================================================================
+STEP 2: DOWNLOAD THE CODE
+================================================================================
+
+1. Go to the GitHub repository
+2. Click "Code" button
+3. Click "Download ZIP"
+4. Extract the ZIP file to a folder (e.g., Desktop)
+
+OR use Git:
+   git clone https://github.com/YOUR_USERNAME/recommandateur-de-films.git
+
+================================================================================
+STEP 3: INSTALL REQUIRED PACKAGES
+================================================================================
+
+1. Open Command Prompt or Terminal
+2. Navigate to the project folder:
+   
+   Windows:
+   cd "C:\Users\YourName\Desktop\recommandateur-de-films"
+   
+   Mac/Linux:
+   cd ~/Desktop/recommandateur-de-films
+
+3. Install packages:
+   pip install -r requirements.txt
+
+   This will install all required Python packages automatically.
+
+================================================================================
+STEP 4: DOWNLOAD THE DATASET
+================================================================================
+
+1. Go to: https://grouplens.org/datasets/movielens/
+2. Download "MovieLens 25M Dataset" (or any MovieLens dataset)
+3. Extract the ZIP file
+4. Find the folder named "ml-25m" (or similar)
+5. Copy this folder to the "data" folder in your project:
+   
+   Your project should look like:
+   recommandateur-de-films/
+   ├── data/
+   │   └── ml-25m/
+   │       ├── movies.csv
+   │       ├── ratings.csv
+   │       └── ...
+   ├── app.py
+   ├── train_models.py
+   └── ...
+
+================================================================================
+STEP 5: TRAIN THE MODELS (ONE TIME ONLY)
+================================================================================
+
+1. Make sure you're in the project folder in Command Prompt/Terminal
+2. Run this command:
+   
+   python train_models.py
+
+3. Wait for training to complete (10-30 minutes depending on your computer)
+   - With GPU: Faster (~10-15 minutes)
+   - Without GPU: Slower but works fine (~20-30 minutes)
+
+4. You'll see messages like:
+   "Loading Dataset..."
+   "Training Content-Based Model..."
+   "Training Collaborative Filtering Model..."
+   "Training Complete!"
+
+5. After training, a "models" folder will be created with trained models.
+
+IMPORTANT: You only need to do this ONCE. After training, you can use the app
+many times without retraining.
+
+================================================================================
+STEP 6: RUN THE APPLICATION
+================================================================================
+
+1. Make sure you're in the project folder in Command Prompt/Terminal
+2. Run this command:
+   
+   streamlit run app.py
+
+   OR if that doesn't work:
+   
+   python -m streamlit run app.py
+
+3. Your web browser will automatically open with the app
+4. If it doesn't open, go to: http://localhost:8501
+
+================================================================================
+STEP 7: USE THE APP
+================================================================================
+
+The app has 3 main tabs:
+
+1. FIND SIMILAR MOVIES:
+   - Type a movie name you like (e.g., "The Matrix", "Inception")
+   - Click "Get Similar Movies"
+   - See recommendations based on similar genres
+
+2. USER RECOMMENDATIONS:
+   - Select a User ID from the dropdown
+   - Click "Get Recommendations"
+   - See personalized recommendations for that user
+   (This is mainly for testing/demo purposes)
+
+3. POPULAR MOVIES:
+   - Click "Show Popular Movies"
+   - Browse the most popular and highly-rated movies
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Problem: "streamlit is not recognized"
+Solution: Use: python -m streamlit run app.py
+
+Problem: "Models not found"
+Solution: Make sure you ran train_models.py first and it completed successfully
+
+Problem: "File not found: movies.csv"
+Solution: Make sure you downloaded the dataset and placed it in data/ml-25m/ folder
+
+Problem: "No module named 'pandas'"
+Solution: Run: pip install -r requirements.txt
+
+Problem: App is slow
+Solution: This is normal on first load. After models load, it's fast.
+
+Problem: Out of memory during training
+Solution: The system automatically limits data size. If still fails, close other
+programs and try again.
+
+================================================================================
+IMPORTANT NOTES
+================================================================================
+
+- GPU is NOT required to use the app (only helps with training speed)
+- After training once, you can use the app on any computer without GPU
+- The models are saved in the "models" folder
+- You can copy the "models" folder to another computer and use it there
+- Training takes time but only needs to be done once
+- The app works on Windows, Mac, and Linux
+
+================================================================================
+QUICK START (IF YOU ALREADY HAVE MODELS)
+================================================================================
+
+If someone gave you the trained models folder:
+
+1. Place the "models" folder in the project directory
+2. Make sure "data/ml-25m/" folder exists with movies.csv and ratings.csv
+3. Run: streamlit run app.py
+4. Done! No training needed.
+
+================================================================================
+NEED HELP?
+================================================================================
+
+Check these files for more information:
+- README.md - Full documentation
+- ARCHITECTURE.md - Technical details
+- GITHUB_SETUP.md - GitHub setup guide
+
+================================================================================
+END OF GUIDE
+================================================================================
+
