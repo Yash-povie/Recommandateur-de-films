@@ -441,5 +441,5 @@ class CollaborativeFiltering:
         self.movie_ids = model_data['movie_ids']
         self.ratings_df = model_data['ratings_df']
         
-        print(f"Model loaded from {filepath}")
+        # Model loaded silently for faster startup
 

@@ -17,6 +17,7 @@ This is a **Hybrid Movie Recommendation System** that combines:
 - **Content-Based Filtering**: Recommends movies based on genre similarity
 - **Collaborative Filtering**: Recommends movies based on similar users' preferences
 - **Hybrid Approach**: Combines both methods for optimal recommendations
+- **Sentiment Analysis**: Analyzes movie sentiment from ratings and text reviews
 
 The system uses the **MovieLens 25M dataset** with 62,423 movies and 25 million ratings from 162,541 users.
 
@@ -34,11 +35,11 @@ The system uses the **MovieLens 25M dataset** with 62,423 movies and 25 million 
                         │
         ┌───────────────┼───────────────┐
         │               │               │
-┌───────▼──────┐ ┌──────▼──────┐ ┌──────▼──────┐
-│   Content-   │ │Collaborative│ │   Hybrid    │
-│   Based      │ │ Filtering   │ │   Engine    │
-│   Model      │ │   Model     │ │             │
-└───────┬──────┘ └──────┬──────┘ └──────┬──────┘
+┌───────▼──────┐ ┌──────▼──────┐ ┌──────▼──────┐ ┌──────▼──────┐
+│   Content-   │ │Collaborative│ │   Hybrid    │ │ Sentiment   │
+│   Based      │ │ Filtering   │ │   Engine    │ │  Analyzer   │
+│   Model      │ │   Model     │ │             │ │             │
+└───────┬──────┘ └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
         │               │               │
         └───────────────┼───────────────┘
                         │
@@ -381,4 +382,5 @@ For issues or questions:
 
 **Last Updated**: 2024
 **Version**: 1.0
+
 

@@ -7,6 +7,7 @@ A hybrid movie recommendation system that combines content-based and collaborati
 - **Content-Based Filtering**: Recommends movies based on similarity of movie features (genres, etc.)
 - **Collaborative Filtering**: Recommends movies based on similar users' preferences
 - **Hybrid Approach**: Combines both methods for better recommendations
+- **Sentiment Analysis**: Analyze movie sentiment based on user ratings and text reviews
 - **Web Interface**: Interactive Streamlit web application
 - **GPU Acceleration**: Automatic GPU detection and acceleration for faster similarity calculations (PyTorch)
 
@@ -52,7 +53,9 @@ Movie Recommendation system/
 │   ├── content_based.py     # Content-based filtering implementation
 │   ├── collaborative.py    # Collaborative filtering implementation
 │   ├── hybrid.py            # Hybrid recommendation engine
-│   └── data_loader.py       # Dataset loading and preprocessing
+│   ├── data_loader.py       # Dataset loading and preprocessing
+│   ├── sentiment_analyzer.py # Sentiment analysis module
+│   └── gpu_utils.py         # GPU utilities
 ├── app.py                   # Main web application
 ├── requirements.txt         # Python dependencies
 └── README.md               # Project documentation
@@ -89,11 +92,12 @@ The app will automatically load the pre-trained models and be ready to use insta
 
 ### Step 3: Get Recommendations
 
-The app has three main features:
+The app has four main features:
 
 1. **Find Similar Movies**: Search for a movie you like → Get similar movie recommendations
 2. **User Recommendations**: Select a user ID from the dataset → Get personalized recommendations for that user (useful for testing/demo)
 3. **Popular Movies**: Browse the most popular and highly-rated movies
+4. **Sentiment Analysis**: Analyze movie sentiment, compare movies, and analyze text reviews
 
 ## GPU Support
 

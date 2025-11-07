@@ -109,7 +109,7 @@ STEP 6: RUN THE APPLICATION
 STEP 7: USE THE APP
 ================================================================================
 
-The app has 3 main tabs:
+The app has 4 main tabs:
 
 1. FIND SIMILAR MOVIES:
    - Type a movie name you like (e.g., "The Matrix", "Inception")
@@ -125,6 +125,12 @@ The app has 3 main tabs:
 3. POPULAR MOVIES:
    - Click "Show Popular Movies"
    - Browse the most popular and highly-rated movies
+
+4. SENTIMENT ANALYSIS:
+   - Analyze sentiment of a single movie
+   - Get top movies by sentiment (positive/negative/neutral)
+   - Analyze text review sentiment
+   - Compare sentiment of multiple movies
 
 ================================================================================
 TROUBLESHOOTING
@@ -183,4 +189,5 @@ Check these files for more information:
 ================================================================================
 END OF GUIDE
 ================================================================================
+
 

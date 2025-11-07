@@ -61,3 +61,8 @@ Thumbs.db
 # Environment variables
 .env
 .env.local
+
+# Test files (optional - can be included)
+# test_sentiment.py
+# test_loading_speed.py
+# check_model_sizes.py

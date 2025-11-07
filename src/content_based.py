@@ -230,5 +230,5 @@ class ContentBasedFiltering:
         if self.use_gpu:
             self.device = get_device()
         
-        print(f"Model loaded from {filepath}")
+        # Model loaded silently for faster startup
 

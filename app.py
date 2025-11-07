@@ -18,6 +18,7 @@ from src.content_based import ContentBasedFiltering
 from src.collaborative import CollaborativeFiltering
 from src.hybrid import HybridRecommendationEngine
 from src.gpu_utils import is_gpu_available, get_device
+from src.sentiment_analyzer import MovieSentimentAnalyzer
 
 # Page configuration
 st.set_page_config(
@@ -57,6 +58,8 @@ if 'current_user_id' not in st.session_state:
     st.session_state.current_user_id = None
 if 'loading_status' not in st.session_state:
     st.session_state.loading_status = "Initializing..."
+if 'loading_started' not in st.session_state:
+    st.session_state.loading_started = False
 
 
 @st.cache_data
@@ -104,6 +107,88 @@ def build_models(data_loader):
     return content_model, collab_model, hybrid_engine
 
 
+@st.cache_resource
+def _load_models_cached():
+    """Cached function to load models - only runs once."""
+    models_dir = 'models'
+    
+    data_loader_path = os.path.join(models_dir, 'data_loader.pkl')
+    content_model_path = os.path.join(models_dir, 'content_based_model.pkl')
+    collab_model_path = os.path.join(models_dir, 'collaborative_model.pkl')
+    hybrid_engine_path = os.path.join(models_dir, 'hybrid_engine.pkl')
+    
+    import pickle
+    
+    # Load all models
+    with open(data_loader_path, 'rb') as f:
+        data_dict = pickle.load(f)
+    
+    # Load content-based model
+    content_model = ContentBasedFiltering(data_dict['movie_features'], use_gpu=False)
+    content_model.load_model(content_model_path)
+    
+    # Create minimal data loader
+    class MinimalDataLoader:
+        def __init__(self, data_dict):
+            self.movies_df = data_dict['movies_df']
+            self.movie_features = data_dict['movie_features']
+            self.ratings_df = data_dict['ratings_df']
+            self.user_ids = data_dict['user_ids']
+            self.movie_ids = data_dict['movie_ids']
+        
+        def get_movie_by_title(self, title, partial=True):
+            """Get movie(s) by title (supports partial matching)."""
+            if partial:
+                mask = self.movies_df['title'].str.contains(title, case=False, na=False)
+            else:
+                mask = self.movies_df['title'].str.lower() == title.lower()
+            return self.movies_df[mask]
+        
+        def get_popular_movies(self, top_n=20, min_ratings=50):
+            """Get most popular movies by average rating."""
+            movie_stats = self.ratings_df.groupby('movieId').agg({
+                'rating': ['mean', 'count']
+            }).reset_index()
+            movie_stats.columns = ['movieId', 'avg_rating', 'num_ratings']
+            movie_stats = movie_stats[movie_stats['num_ratings'] >= min_ratings]
+            movie_stats = movie_stats.sort_values('avg_rating', ascending=False)
+            popular = movie_stats.head(top_n).merge(
+                self.movies_df[['movieId', 'title', 'genres']],
+                on='movieId',
+                how='left'
+            )
+            return popular
+    
+    data_loader = MinimalDataLoader(data_dict)
+    
+    collab_model = CollaborativeFiltering(
+        data_loader.ratings_df,
+        None,
+        data_loader.user_ids,
+        data_loader.movie_ids,
+        use_gpu=False
+    )
+    collab_model.load_model(collab_model_path)
+    
+    # Load hybrid engine
+    with open(hybrid_engine_path, 'rb') as f:
+        hybrid_dict = pickle.load(f)
+    
+    hybrid_engine = HybridRecommendationEngine(
+        content_model,
+        collab_model,
+        data_dict['movie_features']
+    )
+    
+    return {
+        'data_dict': data_dict,
+        'data_loader': data_loader,
+        'content_model': content_model,
+        'collab_model': collab_model,
+        'hybrid_engine': hybrid_engine
+    }
+
+
 def load_pre_trained_models():
     """Load pre-trained models from disk."""
     models_dir = 'models'
@@ -118,76 +203,26 @@ def load_pre_trained_models():
         return False, "Models not found. Please run 'python train_models.py' first to train the models."
     
     try:
-        # Load data loader
-        import pickle
-        with open(data_loader_path, 'rb') as f:
-            data_dict = pickle.load(f)
+        # Use cached loading function
+        st.session_state.loading_status = "Loading models (5-10 seconds)..."
+        models_data = _load_models_cached()
         
-        # Create a minimal data loader object
-        class MinimalDataLoader:
-            def __init__(self, data_dict):
-                self.movies_df = data_dict['movies_df']
-                self.movie_features = data_dict['movie_features']
-                self.ratings_df = data_dict['ratings_df']
-                self.user_ids = data_dict['user_ids']
-                self.movie_ids = data_dict['movie_ids']
-            
-            def get_movie_by_title(self, title, partial=True):
-                """Get movie(s) by title (supports partial matching)."""
-                if partial:
-                    mask = self.movies_df['title'].str.contains(title, case=False, na=False)
-                else:
-                    mask = self.movies_df['title'].str.lower() == title.lower()
-                return self.movies_df[mask]
-            
-            def get_popular_movies(self, top_n=20, min_ratings=50):
-                """Get most popular movies by average rating."""
-                movie_stats = self.ratings_df.groupby('movieId').agg({
-                    'rating': ['mean', 'count']
-                }).reset_index()
-                movie_stats.columns = ['movieId', 'avg_rating', 'num_ratings']
-                movie_stats = movie_stats[movie_stats['num_ratings'] >= min_ratings]
-                movie_stats = movie_stats.sort_values('avg_rating', ascending=False)
-                popular = movie_stats.head(top_n).merge(
-                    self.movies_df[['movieId', 'title', 'genres']],
-                    on='movieId',
-                    how='left'
-                )
-                return popular
+        data_dict = models_data['data_dict']
+        data_loader = models_data['data_loader']
         
-        data_loader = MinimalDataLoader(data_dict)
         st.session_state.data_loader = data_loader
         st.session_state.data_loaded = True
+        st.session_state.content_model = models_data['content_model']
+        st.session_state.collab_model = models_data['collab_model']
+        st.session_state.hybrid_engine = models_data['hybrid_engine']
         
-        # Load content-based model
-        # Use movie_features from the data_dict
-        content_model = ContentBasedFiltering(data_dict['movie_features'], use_gpu=False)
-        content_model.load_model(content_model_path)
+        # Initialize sentiment analyzer (lazy loading - will load when needed)
+        # Don't initialize here to avoid blocking app startup
+        st.session_state.sentiment_analyzer = None
+        st.session_state.sentiment_data_ready = True  # Flag that data is ready for sentiment analysis
         
-        # Load collaborative filtering model
-        collab_model = CollaborativeFiltering(
-            data_loader.ratings_df,
-            None,  # user_item_matrix not needed for loaded model
-            data_loader.user_ids,
-            data_loader.movie_ids,
-            use_gpu=False
-        )
-        collab_model.load_model(collab_model_path)
-        
-        # Load hybrid engine
-        with open(hybrid_engine_path, 'rb') as f:
-            hybrid_dict = pickle.load(f)
-        
-        hybrid_engine = HybridRecommendationEngine(
-            content_model,
-            collab_model,
-            data_dict['movie_features']
-        )
-        
-        st.session_state.content_model = content_model
-        st.session_state.collab_model = collab_model
-        st.session_state.hybrid_engine = hybrid_engine
         st.session_state.models_built = True
+        st.session_state.loading_status = "Ready!"
         
         return True, "Models loaded successfully!"
         
@@ -224,6 +259,7 @@ def main():
         
         with status_placeholder.container():
             st.info(f"🔄 {st.session_state.loading_status}")
+            st.caption("💡 **Tip:** Model loading takes 10-30 seconds. This is normal for large models!")
         
         # Initialize system (this will load data and train models)
         is_ready = initialize_system()
@@ -250,7 +286,7 @@ def main():
         status_placeholder.empty()
         progress_placeholder.empty()
         st.success("✅ System ready! Pre-trained models loaded.")
-        st.rerun()
+        # Don't rerun immediately - let user interact
     
     # Sidebar
     with st.sidebar:
@@ -272,7 +308,7 @@ def main():
     data_loader = st.session_state.data_loader
     
     # Tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["🎬 Find Similar Movies", "👤 User Recommendations", "📊 Popular Movies", "ℹ️ About"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🎬 Find Similar Movies", "👤 User Recommendations", "📊 Popular Movies", "💭 Sentiment Analysis", "ℹ️ About"])
     
     with tab1:
         st.header("🎬 Find Movies Similar to Your Favorite")
@@ -466,6 +502,325 @@ def main():
                     st.warning("No popular movies found with the selected criteria.")
     
     with tab4:
+        st.header("💭 Sentiment Analysis")
+        
+        if not st.session_state.models_built:
+            st.warning("⚠️ Models are still loading. Please wait...")
+        else:
+            # Initialize sentiment analyzer on-demand (lazy loading)
+            # Use compute_sentiments=False to avoid slow initialization
+            if st.session_state.sentiment_analyzer is None and st.session_state.get('sentiment_data_ready', False):
+                with st.spinner("Initializing sentiment analyzer (computing sentiment scores - this may take 30-60 seconds)..."):
+                    try:
+                        # Don't pre-compute all sentiments - compute on demand instead
+                        sentiment_analyzer = MovieSentimentAnalyzer(
+                            st.session_state.data_loader.ratings_df,
+                            st.session_state.data_loader.movies_df,
+                            compute_sentiments=False  # Compute on-demand instead of all at once
+                        )
+                        st.session_state.sentiment_analyzer = sentiment_analyzer
+                        st.success("✅ Sentiment analyzer ready!")
+                    except Exception as e:
+                        st.error(f"❌ Error initializing sentiment analyzer: {str(e)}")
+                        st.info("💡 Make sure to install: pip install textblob vaderSentiment")
+                        st.session_state.sentiment_analyzer = None
+            
+            if st.session_state.sentiment_analyzer is None:
+                st.warning("⚠️ Sentiment analyzer not initialized. Click below to initialize.")
+                if st.button("🔧 Initialize Sentiment Analyzer", type="primary"):
+                    st.rerun()
+            else:
+                sentiment_analyzer = st.session_state.sentiment_analyzer
+            
+            st.markdown("### How it works:")
+            st.info("""
+            Analyze sentiment of movies based on user ratings and reviews. 
+            Get insights into how audiences feel about different movies!
+            """)
+            
+            st.divider()
+            
+            # Sentiment analysis options
+            analysis_type = st.radio(
+                "Choose analysis type:",
+                ["🔍 Analyze Single Movie", "📊 Top Sentiment Movies", "📝 Analyze Text Review", "⚖️ Compare Movies"],
+                horizontal=True
+            )
+            
+            st.divider()
+            
+            if analysis_type == "🔍 Analyze Single Movie":
+                st.markdown("### Analyze Movie Sentiment")
+                
+                # Movie search
+                movie_search = st.text_input(
+                    "🔍 Search for a movie:",
+                    placeholder="e.g., 'The Matrix', 'Inception'...",
+                    key="sentiment_movie_search"
+                )
+                
+                if movie_search:
+                    search_results = data_loader.get_movie_by_title(movie_search, partial=True)
+                    
+                    if len(search_results) > 0:
+                        if len(search_results) == 1:
+                            selected_movie = search_results.iloc[0]
+                        else:
+                            selected_idx = st.selectbox(
+                                "Select movie:",
+                                options=search_results.index,
+                                format_func=lambda idx: f"{search_results.loc[idx, 'title']} ({search_results.loc[idx, 'genres']})",
+                                key="sentiment_movie_select"
+                            )
+                            selected_movie = search_results.loc[selected_idx]
+                        
+                        if st.button("📊 Analyze Sentiment", type="primary"):
+                            sentiment_data = sentiment_analyzer.analyze_movie_sentiment(selected_movie['movieId'])
+                            
+                            if sentiment_data:
+                                st.success(f"✅ Sentiment Analysis for: **{sentiment_data['title']}**")
+                                st.divider()
+                                
+                                # Display sentiment metrics
+                                col1, col2, col3, col4 = st.columns(4)
+                                
+                                with col1:
+                                    st.metric("Sentiment Score", f"{sentiment_data['avg_sentiment']:.3f}")
+                                    st.caption(f"Label: {sentiment_data['sentiment_label']}")
+                                
+                                with col2:
+                                    st.metric("Average Rating", f"{sentiment_data['avg_rating']:.2f}/5.0")
+                                
+                                with col3:
+                                    st.metric("Total Ratings", f"{sentiment_data['num_ratings']:,}")
+                                
+                                with col4:
+                                    st.metric("Genres", sentiment_data.get('genres', 'N/A'))
+                                
+                                st.divider()
+                                
+                                # Sentiment distribution
+                                st.markdown("### 📊 Sentiment Distribution")
+                                
+                                col1, col2, col3 = st.columns(3)
+                                
+                                with col1:
+                                    st.metric("Positive", f"{sentiment_data['positive_pct']:.1f}%")
+                                    st.progress(sentiment_data['positive_pct'] / 100)
+                                
+                                with col2:
+                                    st.metric("Neutral", f"{sentiment_data['neutral_pct']:.1f}%")
+                                    st.progress(sentiment_data['neutral_pct'] / 100)
+                                
+                                with col3:
+                                    st.metric("Negative", f"{sentiment_data['negative_pct']:.1f}%")
+                                    st.progress(sentiment_data['negative_pct'] / 100)
+                                
+                                # Visual representation
+                                import matplotlib.pyplot as plt
+                                
+                                fig, ax = plt.subplots(figsize=(8, 4))
+                                categories = ['Positive', 'Neutral', 'Negative']
+                                values = [sentiment_data['positive_pct'], sentiment_data['neutral_pct'], sentiment_data['negative_pct']]
+                                colors = ['#2ecc71', '#f39c12', '#e74c3c']
+                                
+                                bars = ax.bar(categories, values, color=colors)
+                                ax.set_ylabel('Percentage (%)')
+                                ax.set_title(f"Sentiment Distribution: {sentiment_data['title']}")
+                                ax.set_ylim(0, 100)
+                                
+                                # Add value labels on bars
+                                for bar, value in zip(bars, values):
+                                    height = bar.get_height()
+                                    ax.text(bar.get_x() + bar.get_width()/2., height,
+                                           f'{value:.1f}%', ha='center', va='bottom')
+                                
+                                st.pyplot(fig)
+                            else:
+                                st.warning("No sentiment data available for this movie.")
+                    else:
+                        st.warning("No movies found matching your search.")
+            
+            elif analysis_type == "📊 Top Sentiment Movies":
+                st.markdown("### Top Movies by Sentiment")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    sentiment_filter = st.selectbox(
+                        "Sentiment Type:",
+                        ["Positive", "Negative", "Neutral"],
+                        key="top_sentiment_filter"
+                    )
+                with col2:
+                    top_n = st.slider("Number of movies", min_value=5, max_value=30, value=10, key="top_sentiment_n")
+                
+                if st.button("📊 Get Top Movies", type="primary"):
+                    with st.spinner("Analyzing sentiment..."):
+                        top_movies = sentiment_analyzer.get_top_sentiment_movies(
+                            top_n=top_n,
+                            sentiment_type=sentiment_filter.lower()
+                        )
+                        
+                        if len(top_movies) > 0:
+                            st.success(f"🎬 Top {len(top_movies)} {sentiment_filter} Sentiment Movies!")
+                            st.divider()
+                            
+                            for idx, (_, movie) in enumerate(top_movies.iterrows(), 1):
+                                with st.container():
+                                    col1, col2, col3 = st.columns([4, 1, 1])
+                                    with col1:
+                                        st.markdown(f"### {idx}. {movie['title']}")
+                                        st.markdown(f"**Genres:** {movie['genres']}")
+                                        st.caption(f"Sentiment: {movie['sentiment_label']}")
+                                    with col2:
+                                        sentiment_score = movie['avg_sentiment']
+                                        st.metric("Sentiment", f"{sentiment_score:.3f}")
+                                    with col3:
+                                        st.metric("Ratings", f"{int(movie['num_ratings']):,}")
+                                    
+                                    # Sentiment bar
+                                    if sentiment_score > 0:
+                                        st.progress(sentiment_score, text=f"Positive: {sentiment_score:.3f}")
+                                    else:
+                                        st.progress(abs(sentiment_score), text=f"Negative: {sentiment_score:.3f}")
+                                    
+                                    st.divider()
+                        else:
+                            st.warning(f"No {sentiment_filter.lower()} sentiment movies found.")
+            
+            elif analysis_type == "📝 Analyze Text Review":
+                st.markdown("### Analyze Text Review Sentiment")
+                
+                review_text = st.text_area(
+                    "Enter a movie review or comment:",
+                    placeholder="e.g., 'This movie was absolutely amazing! Great acting and storyline.'",
+                    height=100,
+                    key="review_text_input"
+                )
+                
+                if st.button("🔍 Analyze Text", type="primary"):
+                    if review_text and len(review_text.strip()) > 0:
+                        with st.spinner("Analyzing text sentiment..."):
+                            text_sentiment = sentiment_analyzer.analyze_text_sentiment(review_text)
+                            
+                            if text_sentiment:
+                                st.success("✅ Text Analysis Complete!")
+                                st.divider()
+                                
+                                # Overall sentiment
+                                col1, col2 = st.columns([2, 1])
+                                with col1:
+                                    st.markdown(f"**Text:** *{text_sentiment['text']}*")
+                                with col2:
+                                    sentiment_score = text_sentiment['overall_sentiment']
+                                    label = text_sentiment['overall_label']
+                                    
+                                    if sentiment_score > 0:
+                                        st.success(f"**{label}** ({sentiment_score:.3f})")
+                                    elif sentiment_score < 0:
+                                        st.error(f"**{label}** ({sentiment_score:.3f})")
+                                    else:
+                                        st.info(f"**{label}** ({sentiment_score:.3f})")
+                                
+                                st.divider()
+                                
+                                # Detailed analysis
+                                if 'vader' in text_sentiment['methods']:
+                                    st.markdown("### VADER Sentiment Analysis")
+                                    vader = text_sentiment['methods']['vader']
+                                    
+                                    col1, col2, col3, col4 = st.columns(4)
+                                    with col1:
+                                        st.metric("Compound", f"{vader['compound']:.3f}")
+                                    with col2:
+                                        st.metric("Positive", f"{vader['positive']:.3f}")
+                                    with col3:
+                                        st.metric("Neutral", f"{vader['neutral']:.3f}")
+                                    with col4:
+                                        st.metric("Negative", f"{vader['negative']:.3f}")
+                                
+                                if 'textblob' in text_sentiment['methods']:
+                                    st.markdown("### TextBlob Sentiment Analysis")
+                                    textblob = text_sentiment['methods']['textblob']
+                                    
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        st.metric("Polarity", f"{textblob['polarity']:.3f}")
+                                    with col2:
+                                        st.metric("Subjectivity", f"{textblob['subjectivity']:.3f}")
+                            else:
+                                st.warning("Could not analyze text sentiment.")
+                    else:
+                        st.warning("Please enter some text to analyze.")
+            
+            elif analysis_type == "⚖️ Compare Movies":
+                st.markdown("### Compare Movie Sentiments")
+                
+                st.info("Search and select up to 5 movies to compare their sentiment scores.")
+                
+                movie_comparisons = []
+                for i in range(5):
+                    movie_search = st.text_input(
+                        f"Movie {i+1}:",
+                        placeholder="Search movie title...",
+                        key=f"compare_movie_{i}"
+                    )
+                    
+                    if movie_search:
+                        search_results = data_loader.get_movie_by_title(movie_search, partial=True)
+                        if len(search_results) > 0:
+                            if len(search_results) == 1:
+                                selected_movie = search_results.iloc[0]
+                            else:
+                                selected_idx = st.selectbox(
+                                    f"Select Movie {i+1}:",
+                                    options=search_results.index,
+                                    format_func=lambda idx: f"{search_results.loc[idx, 'title']}",
+                                    key=f"compare_select_{i}"
+                                )
+                                selected_movie = search_results.loc[selected_idx]
+                            
+                            movie_comparisons.append(selected_movie['movieId'])
+                
+                if len(movie_comparisons) > 0 and st.button("⚖️ Compare Sentiments", type="primary"):
+                    with st.spinner("Comparing movie sentiments..."):
+                        comparison_df = sentiment_analyzer.compare_movies_sentiment(movie_comparisons)
+                        
+                        if len(comparison_df) > 0:
+                            st.success(f"✅ Comparing {len(comparison_df)} movies!")
+                            st.divider()
+                            
+                            # Display comparison table
+                            st.dataframe(
+                                comparison_df[['title', 'avg_sentiment', 'avg_rating', 'num_ratings', 'sentiment_label', 'positive_pct', 'negative_pct']],
+                                use_container_width=True
+                            )
+                            
+                            # Visual comparison
+                            import matplotlib.pyplot as plt
+                            
+                            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+                            
+                            # Sentiment scores comparison
+                            ax1.barh(comparison_df['title'], comparison_df['avg_sentiment'], color='steelblue')
+                            ax1.set_xlabel('Sentiment Score')
+                            ax1.set_title('Sentiment Score Comparison')
+                            ax1.axvline(x=0, color='red', linestyle='--', alpha=0.5)
+                            
+                            # Average ratings comparison
+                            ax2.barh(comparison_df['title'], comparison_df['avg_rating'], color='orange')
+                            ax2.set_xlabel('Average Rating')
+                            ax2.set_title('Average Rating Comparison')
+                            ax2.set_xlim(0, 5)
+                            
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                        else:
+                            st.warning("Could not compare movies.")
+                elif len(movie_comparisons) == 0:
+                    st.info("Search for at least one movie to compare.")
+    
+    with tab5:
         st.header("ℹ️ About This System")
         
         st.markdown("""
